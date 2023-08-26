@@ -90,6 +90,13 @@ jobs:
       id: install-kubectl
       uses: azure/setup-kubectl@v3
 
+    - name: Get ACR Login Server
+      run: |
+        ACR_NAME=$(az deployment group show -g ${{ env.AZURE_RESOURCE_GROUP_NAME }} -n acr --query properties.outputs.acrName.value | tr -d '"')
+        echo "ACR_NAME=$ACR_NAME" >> $GITHUB_ENV
+        ACR_LOGIN_SERVER=$(az deployment group show -g ${{ env.AZURE_RESOURCE_GROUP_NAME }} -n acr --query properties.outputs.acrLoginServer.value | tr -d '"')
+        echo "ACR_LOGIN_SERVER=$ACR_LOGIN_SERVER" >> $GITHUB_ENV
+
     - name: Deploy to AKS
       id: deploy-aks
       uses: Azure/k8s-deploy@v4
