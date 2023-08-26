@@ -12,6 +12,7 @@ env:
 
 jobs:
   build-and-push-to-acr:
+    name: Build and Push to ACR
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v2
@@ -56,6 +57,8 @@ jobs:
       run: az logout
   
   preprod-deploy:
+    name: Deploy to Pre-Prod Environment
+    needs: build-and-push-to-acr
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v2
@@ -101,6 +104,8 @@ jobs:
       run: az logout
 
   prod-deploy:
+    name: Deploy to Prod Environment
+    needs: preprod-deploy
     runs-on: ubuntu-latest
     environment: prod
     steps:
