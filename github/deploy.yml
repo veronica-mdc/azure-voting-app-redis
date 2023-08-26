@@ -1,0 +1,110 @@
+name: Deploy to Kubernetes
+
+on:
+  push:
+    branches:
+    - master
+
+env:
+  AZURE_RESOURCE_GROUP_NAME: rg-test-veronica
+  AZURE_RESOURCE_GROUP_LOCATION: eastus
+  IMAGE_NAME: orleans-kubernetes-poc
+
+jobs:
+  build-and-push-to-acr:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+
+    - name: Login to Azure
+      uses: azure/login@v1
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+    - name: Create ACR
+      run: |
+        az deployment group create \
+          --resource-group ${{ env.AZURE_RESOURCE_GROUP_NAME }} \
+          --template-file 'bicep/acr.bicep' \
+          --parameters name=acrkubernetespoc location=${{ env.AZURE_RESOURCE_GROUP_LOCATION }}
+
+    - name: Get ACR Login Server
+      run: |
+        ACR_NAME=$(az deployment group show -g ${{ env.AZURE_RESOURCE_GROUP_NAME }} -n acr --query properties.outputs.acrName.value | tr -d '"')
+        echo "ACR_NAME=$ACR_NAME" >> $GITHUB_ENV
+        ACR_LOGIN_SERVER=$(az deployment group show -g ${{ env.AZURE_RESOURCE_GROUP_NAME }} -n acr --query properties.outputs.acrLoginServer.value | tr -d '"')
+        echo "ACR_LOGIN_SERVER=$ACR_LOGIN_SERVER" >> $GITHUB_ENV
+
+    - name: Prepare Docker buildx
+      uses: docker/setup-buildx-action@v1
+
+    - name: Login to ACR
+      run: |
+        access_token=$(az account get-access-token --query accessToken -o tsv)
+        refresh_token=$(curl https://${{ env.ACR_LOGIN_SERVER }}/oauth2/exchange -v -d "grant_type=access_token&service=${{ env.ACR_LOGIN_SERVER }}&access_token=$access_token" | jq -r .refresh_token)
+        # The null GUID 0000... tells the container registry that this is an ACR refresh token during the login flow
+        docker login -u 00000000-0000-0000-0000-000000000000 --password-stdin ${{ env.ACR_LOGIN_SERVER }} <<< "$refresh_token"
+
+    - name: Build and push image to ACR
+      uses: docker/build-push-action@v2
+      with:
+        push: true
+        tags: ${{ env.ACR_LOGIN_SERVER }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+        file: azure-vote/Dockerfile
+
+    - name: Logout of Azure
+      run: az logout
+  
+  preprod-deploy:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+
+    - name: Login to Azure
+      uses: azure/login@v1
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+    - name: Create AKS
+      run: |
+        az deployment group create \
+          --resource-group ${{ env.AZURE_RESOURCE_GROUP_NAME }} \
+          --template-file 'bicep/aks.bicep' \
+          --parameters location=${{ env.AZURE_RESOURCE_GROUP_LOCATION }} \
+            clusterName=aksorleanstest \
+            linuxAdminUsername=${{ secrets.KUBERNETES_ADMIN_USERNAME }} \
+            sshRSAPublicKey=${{ secrets.KUBERNETES_ADMIN_SSH_PUBLIC_KEY }} \
+          --debug
+
+      - name: Set AKS context
+        id: set-context
+        uses: azure/aks-set-context@v3
+        with:
+          resource-group: '${{ env.AZURE_RESOURCE_GROUP_NAME }}' 
+          cluster-name: aksorleanstest
+
+      - name: Setup kubectl
+        id: install-kubectl
+        uses: azure/setup-kubectl@v3
+
+      - name: Deploy to AKS
+        id: deploy-aks
+        uses: Azure/k8s-deploy@v4
+        with:
+          action: deploy
+          manifests: |
+            kubernetes
+          images: ${{ env.ACR_LOGIN_SERVER }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+          pull-images: false 
+        
+    - name: Logout of Azure
+      run: az logout
+
+  prod-deploy:
+    runs-on: ubuntu-latest
+    environment: prod
+    steps:
+    - name: Nothing for now
+      run: echo "Deployed to prod!! :)"
+
+    
