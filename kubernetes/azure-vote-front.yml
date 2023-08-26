@@ -21,7 +21,7 @@ spec:
         "kubernetes.io/os": linux
       containers:
       - name: azure-vote-front
-        image: acrkubernetespoc.azurecr.io/orleans-kubernetes-tutorial:1.0.0
+        image: acrkubernetespoc.azurecr.io/orleans-kubernetes-poc:1.0.0
         resources:
           requests:
             cpu: 100m
