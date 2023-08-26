@@ -73,7 +73,7 @@ jobs:
           --parameters location=${{ env.AZURE_RESOURCE_GROUP_LOCATION }} \
             clusterName=aksorleanstest \
             linuxAdminUsername=${{ secrets.KUBERNETES_ADMIN_USERNAME }} \
-            sshRSAPublicKey=${{ secrets.KUBERNETES_ADMIN_SSH_PUBLIC_KEY }} \
+            sshRSAPublicKey='${{ secrets.KUBERNETES_ADMIN_SSH_PUBLIC_KEY }}' \
           --debug
 
     - name: Set AKS context
